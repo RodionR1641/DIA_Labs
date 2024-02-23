@@ -13,30 +13,36 @@ class Brain():
         self.turningCount = 0 # number of turns bot gets for turning 
         self.movingCount = random.randrange(50,100) # number of turns the bot gets before starting to turn
         self.currentlyTurning = False
-        self.map = np.zeros((10,10)) # dividing the 100-700 in x and 100-500 in y into 10x10 maps. Start with an array of 0s
+        self.map = np.zeros((10,10), dtype=int) # dividing x and y into 10x10 maps. Start with an array of 0s
 
     # modify this to change the robot's behaviour
-    def thinkAndAct(self, lightL, lightR, chargerL, chargerR, x, y, sl, sr, battery):
+    def thinkAndAct(self, lightL, lightR, chargerL, chargerR, x, y, sl, sr, battery,wanderingBehaviour):
         newX = None
         newY = None
         
-        # wandering behaviour
-        # bot turns around for a bit
-        if self.currentlyTurning==True:
-            speedLeft = -2.0
-            speedRight = 2.0
-            self.turningCount -= 1 # decrease turn until it reaches 0
-        else:
-            # make these depend on either getting to dirt or attracted to light
-            speedLeft = 5.0
-            speedRight = 5.0
-            self.movingCount -= 1 # decreasing moving count so the bot starts to turn at some point
-        if self.movingCount==0 and not self.currentlyTurning:
-            self.turningCount = random.randrange(20,40) 
-            self.currentlyTurning = True
-        if self.turningCount==0 and self.currentlyTurning:
-            self.movingCount = random.randrange(50,100)
-            self.currentlyTurning = False
+        if(wanderingBehaviour):
+            # wandering behaviour
+            # bot turns around for a bit
+            if self.currentlyTurning==True:
+                speedLeft = -2.0
+                speedRight = 2.0
+                self.turningCount -= 1 # decrease turn until it reaches 0
+            else:
+                # make these depend on either getting to dirt or attracted to light
+                speedLeft = 5.0
+                speedRight = 5.0
+                self.movingCount -= 1 # decreasing moving count so the bot starts to turn at some point
+            if self.movingCount==0 and not self.currentlyTurning:
+                self.turningCount = random.randrange(20,40) 
+                self.currentlyTurning = True
+            if self.turningCount==0 and self.currentlyTurning:
+                self.movingCount = random.randrange(50,100)
+                self.currentlyTurning = False
+
+        #will go to unexplored parts of the map
+            
+
+
 
         #battery - these are later so they have priority
         if battery<600:
@@ -67,10 +73,18 @@ class Brain():
 
     def updateMap(self):
         # calculating the current square the robot is in
-        xMapPosition = int(math.floor(self.bot.x/100)) # get the current 10x10 x index
-        yMapPosition = int(math.floor(self.bot.y/100))
 
-        self.map[xMapPosition][yMapPosition] = 1 # we have now visited the position
+        xMapPosition = int(math.floor(self.bot.x/100)) # get the current 10x10 x map index
+        yMapPosition = int(math.floor(self.bot.y/100)) # same for y
+
+        #safe guard for indices as at 1000 it will be 10, but we want range of 0-9
+        if xMapPosition == 10:
+            xMapPosition = 9
+        if yMapPosition == 10:
+            yMapPosition = 9
+
+        
+        self.map[xMapPosition,yMapPosition] = 1 # we have now visited the position
 
 # so far it looks for chargers and lights
 class Bot():
@@ -90,7 +104,7 @@ class Bot():
         lightL, lightR = self.senseLight(passiveObjects)
         chargerL, chargerR = self.senseChargers(passiveObjects)
         self.sl, self.sr, xx, yy = self.brain.thinkAndAct\
-            (lightL, lightR, chargerL, chargerR, self.x, self.y, self.sl, self.sr, self.battery)
+            (lightL, lightR, chargerL, chargerR, self.x, self.y, self.sl, self.sr, self.battery,True)
         if xx != None:
             self.x = xx
         if yy != None:
@@ -198,10 +212,11 @@ class Bot():
         
     def drawMap(self,canvas):
         map = self.brain.map
-        for row in map:
-            for element in row:
-                if(element == 1.0):
-                    canvas.create_rectangle(100*self.x,100*self.y,100*self.x+100,100*self.y+100
+        for i in range(map.shape[0]):
+            for j in range(map.shape[1]):
+                element = map[i,j]
+                if(element == 1):
+                    canvas.create_rectangle(100*i,100*j,100*i+100,100*j+100
                                                  ,fill="pink",width=0,tags="map")
                     canvas.tag_lower("map") 
         
@@ -237,7 +252,7 @@ class Bot():
             self.x += self.sr*math.cos(self.theta) #sr wlog
             self.y += self.sr*math.sin(self.theta)
         canvas.delete(self.name)
-        #self.brain.updateMap()
+        self.brain.updateMap()
         self.draw(canvas)
 
     # checks if dirt is near the bot and then deletes it from canvas
@@ -365,6 +380,9 @@ def createObjects(canvas,noOfBots=2,noOfLights=2,amountOfDirt=300):
     hub2 = WiFiHub("Hub2",50,500)
     passiveObjects.append(hub2)
     hub2.draw(canvas)
+    hub3 = WiFiHub("Hub3",800,800)
+    passiveObjects.append(hub3)
+    hub3.draw(canvas)
 
     for i in range(0,amountOfDirt):
         dirt = Dirt("Dirt"+str(i))
@@ -397,7 +415,7 @@ def moveIt(canvas,agents,passiveObjects,count,moves,noOfBots):
 def main():
     window = tk.Tk()
     canvas = initialise(window)
-    numberOfBots = 5
+    numberOfBots = 2
     agents, passiveObjects, count = createObjects(canvas,numberOfBots,noOfLights=0,amountOfDirt=300)
     moveIt(canvas,agents,passiveObjects,count,0,numberOfBots)
     window.mainloop()
