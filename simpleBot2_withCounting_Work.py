@@ -14,12 +14,57 @@ class Brain():
         self.movingCount = random.randrange(50,100) # number of turns the bot gets before starting to turn
         self.currentlyTurning = False
         self.map = np.zeros((10,10), dtype=int) # dividing x and y into 10x10 maps. Start with an array of 0s
+        self.training = True
+        self.trainingTimeSquare = 0
+        self.trainingX = 0
+        self.trainingY = 0
+        self.locationList = []
 
     # modify this to change the robot's behaviour
-    def thinkAndAct(self, lightL, lightR, chargerL, chargerR, x, y, sl, sr, battery,wanderingBehaviour):
+    def thinkAndAct(self, lightL, lightR, chargerL, chargerR, hubs,x, y, sl, sr, battery,wanderingBehaviour):
         newX = None
         newY = None
-        
+
+        print(hubs)
+
+        #training phase, physically move robot around and record strength of hubs to x,y/what block we are in
+        # cover the whole room for the traning
+
+        if self.training:
+            currentSquare = [int(math.floor(x/100.0)),
+                            int(math.floor(y/100.0))]
+            self.locationList.append([hubs,currentSquare]) # adding the location of newX and newY into the list, would be used
+            # to figure out location based on hubs in testing, close enough approximation 
+            if self.trainingTimeSquare % 2 == 0: # this is to make sure that for each grid the bot visits it X amount of times
+                self.trainingX += 1
+                if self.trainingX == 10:
+                    self.trainingX = 0
+                    self.trainingY += 1 # move Y on 1, we go through all X and Y square positions for training
+                if self.trainingY == 10:
+                    self.training = False # finish training
+            newX = self.trainingX*100.0 + random.random() * 100.0 # next position will be in next square and random position in that square
+            newY = self.trainingY*100.0 + random.random() * 100.0
+            currentSquare = [newX,newY]
+            
+            self.trainingTimeSquare += 1 # training time for each square in grid
+
+        if(self.training == False):
+            bestLocation = []
+            bestDistance = math.inf
+
+            for [hubVal,loc] in self.locationList:
+                compare = 0
+                # see how close the current hub values are to the list
+                for i,h in enumerate(hubs): # go through loop 3 times for each hub value, h is hub and i is the hub number
+                    compare += (h-hubVal[i])**2 # difference between current and stored hubs, doing mean squared error. Compare hub1 current with the one from trainign list
+                compare = math.sqrt(compare)
+
+                if compare < bestDistance:
+                    bestDistance = compare
+                    bestLocation = loc
+
+            print(bestLocation)
+
         if(wanderingBehaviour):
             # wandering behaviour
             # bot turns around for a bit
@@ -39,8 +84,8 @@ class Brain():
                 self.movingCount = random.randrange(50,100)
                 self.currentlyTurning = False
 
-        #will go to unexplored parts of the map
-            
+        #will go to unexplored parts of the map here
+                
 
 
 
@@ -103,8 +148,14 @@ class Bot():
     def thinkAndAct(self, agents, passiveObjects):
         lightL, lightR = self.senseLight(passiveObjects)
         chargerL, chargerR = self.senseChargers(passiveObjects)
+
+        hubs = [] #contains distance to each wifi hub
+        for p in passiveObjects:
+            if isinstance(p,WiFiHub): # check if p is a WiFi hub instance
+                hubs.append(self.distanceTo(p)) # calculate the distance to each WiFi hub
+
         self.sl, self.sr, xx, yy = self.brain.thinkAndAct\
-            (lightL, lightR, chargerL, chargerR, self.x, self.y, self.sl, self.sr, self.battery,True)
+            (lightL, lightR, chargerL, chargerR, hubs, self.x, self.y, self.sl, self.sr, self.battery,True)
         if xx != None:
             self.x = xx
         if yy != None:
@@ -224,7 +275,7 @@ class Bot():
     # handles the physics of the movement
     # cf. Dudek and Jenkin, Computational Principles of Mobile Robotics
     def move(self,canvas,dt):
-        print("Current Battery = " + str(self.battery))
+        #print("Current Battery = " + str(self.battery))
         if self.battery==0:
             self.sl = 0
             self.sl = 0
@@ -264,7 +315,7 @@ class Bot():
                     canvas.delete(rr.name)
                     toDelete.append(idx)
                     count.itemCollected(canvas) # update the counter
-                    print("Dirt collected = " + str(count.dirtCollected))
+                    #print("Dirt collected = " + str(count.dirtCollected))
         for ii in sorted(toDelete,reverse=True):
             del passiveObjects[ii]
         return passiveObjects
@@ -415,7 +466,7 @@ def moveIt(canvas,agents,passiveObjects,count,moves,noOfBots):
 def main():
     window = tk.Tk()
     canvas = initialise(window)
-    numberOfBots = 2
+    numberOfBots = 1
     agents, passiveObjects, count = createObjects(canvas,numberOfBots,noOfLights=0,amountOfDirt=300)
     moveIt(canvas,agents,passiveObjects,count,0,numberOfBots)
     window.mainloop()
