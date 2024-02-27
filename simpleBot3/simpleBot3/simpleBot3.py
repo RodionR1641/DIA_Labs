@@ -14,6 +14,9 @@ class Brain():
         self.turningCount = 0
         self.movingCount = random.randrange(50,100)
         self.currentlyTurning = False
+        self.time = 0 # keeps track of training time
+        self.trainingSet = []
+        self.dangerThreshold = 0
 
     # modify this to change the robot's behaviour
     def thinkAndAct(self, lightL, lightR, chargerL, chargerR, x, y, sl, sr,\
@@ -21,7 +24,43 @@ class Brain():
         newX = None
         newY = None
         dangerDetected = False
+
+        trainingTime = 1000
         
+        if(self.time < trainingTime):
+            self.trainingSet.append((camera,collision)) # store the list of sensor values and if the bot hit the cats
+
+
+
+        elif(self.time == trainingTime):
+            warningValues = []
+            for i,tt in enumerate(self.trainingSet):
+                if i>=5 and tt[1]==True: #check if the value is true, then append the sensors 5 steps before to act as warning values
+                    warningValues.append(self.trainingSet[i-5][0])
+            
+            #find out on average how close we are to cat before collision happens
+            countWV = 0
+            sumWV = 0
+            for wv in warningValues:
+                if not wv==[0]*9: # ignore all 0s collisions(cat behind robot)
+                    sumWV += max(wv) #maximum sensor value appended
+                    countWV += 1
+            if(sumWV == 0):
+                print("No collisions registered for training, get more cats or more training time")
+            else:
+                self.dangerThreshold = sumWV/countWV
+                print("bot now trained")
+                print(self.dangerThreshold)
+        else:
+            if self.dangerThreshold == 0:
+                #didnt get any collisions in training so ignore behaviour
+                pass
+            elif any(c>self.dangerThreshold for c in camera): # if any value of the camera sensors goes above threshold, assume collision
+                # is imminent
+                dangerDetected = True
+
+        self.time += 1
+
         # wandering behaviour
         if self.currentlyTurning==True:
             speedLeft = -2.0
@@ -64,6 +103,12 @@ class Brain():
             newY = 1000
 
         return speedLeft, speedRight, newX, newY, dangerDetected
+    
+    #function to make the bot turn around 
+    def turnAround(self):
+        self.movingCount = 0
+        self.turningCount = random.randrange(5,15) # make shorter turn around if cats are around than normal one
+        self.currentlyTurning = True
 
 class Bot():
 
@@ -79,7 +124,7 @@ class Bot():
         self.sr = 0.0
         self.battery = 1000
  
-
+    # collects the sensor data and makes brain do decision
     def thinkAndAct(self, agents, passiveObjects, canvas):
         lightL, lightR = self.senseLight(passiveObjects)
         chargerL, chargerR = self.senseChargers(passiveObjects)
@@ -102,6 +147,16 @@ class Bot():
     def reactToDanger(self, agents):
         print("dangerous situation")
         # define the reaction to danger here
+        catJump = False
+        #telling Cats to jump away
+        if(catJump):
+            for agent in agents:
+                if isinstance(agent,Cat):
+                    agent.jump(True) # make cat do big jump if a collision is imminent
+
+        #making the bot turn around
+        else:
+            self.brain.turnAround()
         
     def look(self,agents):
         self.view = [0]*9
@@ -288,9 +343,10 @@ class Bot():
                 if self.distanceTo(rr)<50.0:
                     #playsound("385892__spacether__262312-steffcaffrey-cat-meow1.mp3",block=False)
                     collision = True
-                    rr.jump()
+                    rr.jump(False) # make cat make small jump after collision
         return collision
 
+# cat class
 class Cat:
     def __init__(self,namep,canvasp):
         self.x = random.randint(100,900)
@@ -370,9 +426,15 @@ class Cat:
         canvas.delete(self.name)
         self.draw(canvas)
 
-    def jump(self):
-        self.x += random.randint(20,50)
-        self.y += random.randint(20,50)
+    def jump(self,big):
+        
+        if not big: # big jump when a robot goes near it
+            self.x += random.randint(20,50)
+            self.y += random.randint(20,50)
+        else:# jump if cat collides with bot
+            self.x += random.randint(50,100)
+            self.y += random.randint(50,100)
+
         if self.x<0.0:
             self.x=999.0
         if self.x>1000.0:
@@ -446,7 +508,7 @@ class Counter:
     def __init__(self):
         self.dirtCollected = 0
 
-    def itemCollected(self,canvas):
+    def itemCollected(self,canvas): # counter for dirt
         self.dirtCollected += 1
         canvas.delete("dirtCount")
         canvas.create_text(50,50,anchor="w",\
@@ -466,7 +528,7 @@ def buttonClicked(x,y,agents):
             rr.x = x
             rr.y = y
 
-def createObjects(canvas,noOfBots=2,noOfLights=2,amountOfDirt=300,noOfCats=5):
+def createObjects(canvas,noOfBots=2,noOfLights=2,amountOfDirt=300,noOfCats=20):
     agents = []
     passiveObjects = []
     
@@ -524,7 +586,7 @@ def moveIt(canvas,agents,passiveObjects,count,moves):
 def main():
     window = tk.Tk()
     canvas = initialise(window)
-    agents, passiveObjects, count = createObjects(canvas,noOfBots=1,noOfLights=0,amountOfDirt=300,noOfCats=5)
+    agents, passiveObjects, count = createObjects(canvas,noOfBots=1,noOfLights=0,amountOfDirt=300,noOfCats=20)
     moveIt(canvas,agents,passiveObjects,count,0)
     window.mainloop()
 
